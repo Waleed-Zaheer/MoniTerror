@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Category } from '../types';
+import { IconAlertTriangle, IconCheck, IconInfo, IconX } from './icons';
 
 /* ------------------------------ Card ------------------------------ */
 export function Card({ className = '', children }: { className?: string; children: ReactNode }) {
@@ -129,19 +130,118 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2">
+      <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2 px-4">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`animate-fade-up rounded-xl px-4 py-2.5 text-sm font-medium shadow-lg ring-1 backdrop-blur
+            className={`animate-fade-up flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium shadow-lg ring-1 backdrop-blur
               ${t.kind === 'error'
-                ? 'bg-rose-950/80 text-rose-200 ring-rose-500/40'
-                : 'bg-slate-900/85 text-slate-100 ring-white/10'}`}
+                ? 'bg-rose-950/85 text-rose-200 ring-rose-500/40'
+                : 'bg-slate-900/90 text-slate-100 ring-white/10'}`}
           >
+            <span className={t.kind === 'error' ? 'text-rose-400' : 'text-emerald-400'}>
+              {t.kind === 'error' ? <IconAlertTriangle className="h-4 w-4" /> : <IconCheck className="h-4 w-4" />}
+            </span>
             {t.text}
           </div>
         ))}
       </div>
     </ToastCtx.Provider>
+  );
+}
+
+/* ------------------------------ Confirm dialog ------------------------------ */
+export interface ConfirmOptions {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: 'danger' | 'warn' | 'primary';
+}
+
+interface ConfirmState extends ConfirmOptions {
+  resolve: (value: boolean) => void;
+}
+
+const ConfirmCtx = createContext<(opts: ConfirmOptions) => Promise<boolean>>(() => Promise.resolve(false));
+export const useConfirm = () => useContext(ConfirmCtx);
+
+const DIALOG_ICON_STYLES: Record<NonNullable<ConfirmOptions['variant']>, string> = {
+  danger: 'bg-rose-500/15 text-rose-400 ring-rose-500/30',
+  warn: 'bg-amber-500/15 text-amber-400 ring-amber-500/30',
+  primary: 'bg-brand-500/15 text-brand-400 ring-brand-500/30',
+};
+
+export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<ConfirmState | null>(null);
+
+  const confirm = useCallback((opts: ConfirmOptions) => {
+    return new Promise<boolean>((resolve) => setState({ ...opts, resolve }));
+  }, []);
+
+  const close = useCallback((result: boolean) => {
+    setState((s) => {
+      s?.resolve(result);
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!state) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close(false);
+      if (e.key === 'Enter') close(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [state, close]);
+
+  const variant = state?.variant ?? 'primary';
+
+  return (
+    <ConfirmCtx.Provider value={confirm}>
+      {children}
+      {state && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          onClick={() => close(false)}
+        >
+          <div
+            className="w-full max-w-sm animate-fade-up rounded-2xl bg-slate-900 p-5 ring-1 ring-white/10 shadow-2xl shadow-black/50"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-dialog-title"
+          >
+            <div className="flex items-start gap-3.5">
+              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ring-1 ${DIALOG_ICON_STYLES[variant]}`}>
+                {variant === 'primary' ? <IconInfo className="h-5 w-5" /> : <IconAlertTriangle className="h-5 w-5" />}
+              </span>
+              <div className="min-w-0 flex-1 pt-1">
+                <div id="confirm-dialog-title" className="text-[15px] font-bold text-slate-50">
+                  {state.title}
+                </div>
+                {state.description && (
+                  <div className="mt-1.5 text-sm leading-relaxed text-slate-400">{state.description}</div>
+                )}
+              </div>
+              <button
+                onClick={() => close(false)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
+                aria-label="Cancel"
+              >
+                <IconX className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end gap-2.5">
+              <Button variant="ghost" onClick={() => close(false)}>{state.cancelLabel ?? 'Cancel'}</Button>
+              <Button variant={variant} onClick={() => close(true)} autoFocus>
+                {state.confirmLabel ?? 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ConfirmCtx.Provider>
   );
 }

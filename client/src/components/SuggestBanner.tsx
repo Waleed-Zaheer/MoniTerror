@@ -1,4 +1,5 @@
 import { Button } from './ui';
+import { IconZap } from './icons';
 import { fmtBytes } from '../api';
 import type { Overview } from '../types';
 
@@ -15,8 +16,10 @@ export function SuggestBanner({
   if (closeable.count === 0) return null;
 
   return (
-    <div className="mb-5 flex flex-col gap-4 rounded-2xl bg-gradient-to-r from-amber-500/15 to-transparent p-4 ring-1 ring-amber-500/40 sm:flex-row sm:items-center">
-      <div className="text-2xl">💡</div>
+    <div className="mb-5 flex flex-col gap-4 rounded-2xl bg-linear-to-r from-amber-500/15 to-transparent p-4 ring-1 ring-amber-500/40 sm:flex-row sm:items-center">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30">
+        <IconZap className="h-5 w-5" />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-bold text-amber-100">
           You can likely free ~{fmtBytes(closeable.totalMemBytes)} — {closeable.count} background app

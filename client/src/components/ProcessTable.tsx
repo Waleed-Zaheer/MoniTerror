@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, CategoryBadge, Spinner } from './ui';
+import { IconChevronRight } from './icons';
 import { fmtBytes } from '../api';
 import type { ProcessGroup } from '../types';
 
@@ -93,7 +94,7 @@ function ProcessRow({
             className="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
             aria-label={isOpen ? 'Collapse' : 'Expand'}
           >
-            <span className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}>▸</span>
+            <IconChevronRight className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
           </button>
         </td>
         <td className="px-3 py-2.5 align-middle">

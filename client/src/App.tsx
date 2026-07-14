@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import type { Category, Overview, PortEntry, ProcessGroup } from './types';
-import { Button, Card, Spinner, Toggle, ToastProvider, useToast } from './components/ui';
+import { Button, Card, ConfirmProvider, Spinner, Toggle, ToastProvider, useConfirm, useToast } from './components/ui';
+import { IconCpu, IconPlug, IconSearch } from './components/icons';
 import { StatCards } from './components/StatCards';
 import { SuggestBanner } from './components/SuggestBanner';
 import { ProcessTable } from './components/ProcessTable';
@@ -19,6 +20,7 @@ const FILTERS: { key: Category | 'all'; label: string }[] = [
 
 function AppInner() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<'ram' | 'ports'>('ram');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [ports, setPorts] = useState<PortEntry[]>([]);
@@ -64,10 +66,16 @@ function AppInner() {
   }, [auto, refresh]);
 
   const stopGroup = useCallback(async (g: ProcessGroup) => {
-    const msg = g.instances.length > 1
-      ? `Stop all ${g.instances.length} instances of "${g.name}"? This forcibly kills them.`
-      : `Stop "${g.name}" (PID ${g.instances[0].pid})? This forcibly kills it.`;
-    if (!window.confirm(msg)) return;
+    const multi = g.instances.length > 1;
+    const ok = await confirm({
+      title: multi ? `Stop all ${g.instances.length} instances of "${g.name}"?` : `Stop "${g.name}"?`,
+      description: multi
+        ? 'This will forcibly kill every running instance of this process.'
+        : `This will forcibly kill PID ${g.instances[0].pid}. Unsaved work in it will be lost.`,
+      confirmLabel: 'Stop',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyName(g.name);
     try {
       await api.stopByName(g.name);
@@ -78,10 +86,16 @@ function AppInner() {
     } finally {
       setBusyName(null);
     }
-  }, [refresh, toast]);
+  }, [confirm, refresh, toast]);
 
   const stopPid = useCallback(async (pid: number, name: string) => {
-    if (!window.confirm(`Stop PID ${pid} (${name})?`)) return;
+    const ok = await confirm({
+      title: `Stop PID ${pid}?`,
+      description: `Process: "${name}". This forcibly kills it and any unsaved work in it will be lost.`,
+      confirmLabel: 'Stop',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.stopByPid(pid);
       toast(`Stopped PID ${pid}.`);
@@ -89,10 +103,16 @@ function AppInner() {
     } catch (e) {
       toast((e as Error).message, 'error');
     }
-  }, [refresh, toast]);
+  }, [confirm, refresh, toast]);
 
   const freePort = useCallback(async (port: number, name: string) => {
-    if (!window.confirm(`Free port ${port} by stopping "${name}"?`)) return;
+    const ok = await confirm({
+      title: `Free port ${port}?`,
+      description: `This stops "${name}" — the process currently holding it.`,
+      confirmLabel: 'Free port',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyPort(port);
     try {
       await api.freePort(port);
@@ -103,25 +123,31 @@ function AppInner() {
     } finally {
       setBusyPort(null);
     }
-  }, [refresh, toast]);
+  }, [confirm, refresh, toast]);
 
   const closeAll = useCallback(async () => {
     if (!overview) return;
     const names = overview.closeable.names;
     if (names.length === 0) return;
-    if (!window.confirm(`Close these ${names.length} background app(s)?\n\n${names.join(', ')}\n\nThis forcibly stops them.`)) return;
+    const ok = await confirm({
+      title: `Close ${names.length} background app${names.length === 1 ? '' : 's'}?`,
+      description: `${names.join(', ')} — this forcibly stops all of them.`,
+      confirmLabel: 'Close all',
+      variant: 'warn',
+    });
+    if (!ok) return;
     setBulkBusy(true);
-    let ok = 0;
+    let ok2 = 0;
     for (const name of names) {
       try {
         await api.stopByName(name);
-        ok++;
+        ok2++;
       } catch { /* keep going */ }
     }
-    toast(`Closed ${ok} of ${names.length} app(s).`);
+    toast(`Closed ${ok2} of ${names.length} app(s).`);
     setBulkBusy(false);
     await refresh(false);
-  }, [overview, refresh, toast]);
+  }, [confirm, overview, refresh, toast]);
 
   const filteredGroups = useMemo(() => {
     if (!overview) return [];
@@ -149,10 +175,10 @@ function AppInner() {
   }, [ports, portSearch]);
 
   return (
-    <div className="app-bg text-slate-200">
-      <div className="mx-auto max-w-6xl px-5 pb-20 sm:px-7">
-        {/* Header */}
-        <header className="flex flex-wrap items-center justify-between gap-4 py-5">
+    <div className="app-bg min-h-screen text-slate-200">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-40 border-b border-white/10 bg-[#060810]/80 backdrop-blur-md">
+        <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-7">
           <div className="flex items-center gap-3">
             <span className="text-2xl text-brand-400 drop-shadow-[0_0_10px_rgba(110,168,255,0.5)]">◈</span>
             <div className="leading-tight">
@@ -168,13 +194,15 @@ function AppInner() {
             </Button>
           </div>
         </header>
+      </div>
 
+      <div className="mx-auto max-w-6xl px-5 pb-20 pt-5 sm:px-7">
         <StatCards overview={overview} />
 
         {/* Tabs */}
         <div className="mt-5 flex items-center gap-1 border-b border-white/10">
-          <TabButton active={tab === 'ram'} onClick={() => setTab('ram')} label="RAM & Processes" />
-          <TabButton active={tab === 'ports'} onClick={() => setTab('ports')} label="Ports" count={ports.length} />
+          <TabButton active={tab === 'ram'} onClick={() => setTab('ram')} icon={<IconCpu className="h-4 w-4" />} label="RAM & Processes" />
+          <TabButton active={tab === 'ports'} onClick={() => setTab('ports')} icon={<IconPlug className="h-4 w-4" />} label="Ports" count={ports.length} />
           <span className="ml-auto pb-2 text-xs text-slate-500">{updatedAt && `Updated ${updatedAt}`}</span>
         </div>
 
@@ -184,13 +212,16 @@ function AppInner() {
             {overview && <SuggestBanner overview={overview} onCloseAll={closeAll} busy={bulkBusy} />}
 
             <div className="mb-3 flex flex-wrap items-center gap-2.5">
-              <input
-                type="search"
-                value={ramSearch}
-                onChange={(e) => setRamSearch(e.target.value)}
-                placeholder="Filter processes by name…"
-                className="min-w-[200px] flex-1 rounded-xl bg-white/5 px-3.5 py-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-brand-500"
-              />
+              <div className="relative min-w-[200px] flex-1">
+                <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="search"
+                  value={ramSearch}
+                  onChange={(e) => setRamSearch(e.target.value)}
+                  placeholder="Filter processes by name…"
+                  className="w-full rounded-xl bg-white/5 py-2 pl-9 pr-3.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-brand-500"
+                />
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {FILTERS.map((f) => (
                   <button
@@ -222,13 +253,14 @@ function AppInner() {
         {/* Ports tab */}
         {tab === 'ports' && (
           <div className="animate-fade-up pt-5">
-            <div className="mb-3">
+            <div className="relative mb-3">
+              <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 type="search"
                 value={portSearch}
                 onChange={(e) => setPortSearch(e.target.value)}
                 placeholder="Filter by port, process, or address…"
-                className="w-full rounded-xl bg-white/5 px-3.5 py-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-brand-500"
+                className="w-full rounded-xl bg-white/5 py-2 pl-9 pr-3.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-brand-500"
               />
             </div>
             <p className="mb-3 text-sm text-slate-400">
@@ -245,13 +277,26 @@ function AppInner() {
   );
 }
 
-function TabButton({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count?: number }) {
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+}) {
   return (
     <button
       onClick={onClick}
       className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition
         ${active ? 'border-brand-400 text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
     >
+      <span className={active ? 'text-brand-400' : 'text-slate-500'}>{icon}</span>
       {label}
       {count !== undefined && count > 0 && (
         <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-bold text-brand-300">{count}</span>
@@ -263,7 +308,9 @@ function TabButton({ active, onClick, label, count }: { active: boolean; onClick
 export default function App() {
   return (
     <ToastProvider>
-      <AppInner />
+      <ConfirmProvider>
+        <AppInner />
+      </ConfirmProvider>
     </ToastProvider>
   );
 }
