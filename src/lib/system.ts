@@ -128,25 +128,79 @@ function runLenient(cmd: string, args: string[]): Promise<string> {
   });
 }
 
-function toArray<T>(value: T | T[] | undefined | null): T[] {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
+/** Parses one line of `tasklist /FO CSV` output: "Image Name","PID","Session Name","Session#","Mem Usage". */
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  const re = /"([^"]*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line))) fields.push(m[1]);
+  return fields;
 }
 
 // ---------------------------------------------------------------------------
 // Process listing (per-platform)
 // ---------------------------------------------------------------------------
-
-const WIN_PROCESS_SCRIPT = `
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$procs = Get-Process | Select-Object Id, ProcessName, @{N='Mem';E={$_.WorkingSet64}}
-@($procs) | ConvertTo-Json -Compress -Depth 3
-`;
+//
+// Windows uses `tasklist` rather than PowerShell's Get-Process: spawning
+// powershell.exe costs ~2-3x longer than tasklist.exe just to start up
+// (CLR bootstrap), and every process/port/kill request pays that cost.
 
 async function listProcessesWindows(): Promise<RawProc[]> {
-  const stdout = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', WIN_PROCESS_SCRIPT]);
-  const data = JSON.parse(stdout) as { Id: number; ProcessName: string; Mem: number } | Array<{ Id: number; ProcessName: string; Mem: number }>;
-  return toArray(data).map((p) => ({ pid: Number(p.Id), name: p.ProcessName || 'Unknown', memBytes: Number(p.Mem) || 0 }));
+  const stdout = await run('tasklist.exe', ['/FO', 'CSV', '/NH']);
+  const procs: RawProc[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const fields = parseCsvLine(line);
+    if (fields.length < 5) continue;
+    const pid = Number(fields[1]);
+    if (!Number.isFinite(pid)) continue;
+    const name = fields[0].replace(/\.exe$/i, '');
+    const memBytes = (Number(fields[4].replace(/[^\d]/g, '')) || 0) * 1024;
+    procs.push({ pid, name, memBytes });
+  }
+  return procs;
+}
+
+/** Fast single-PID lookup — used before killing, so we don't pay for a full process listing. */
+async function lookupProcessNameWindows(pid: number): Promise<string | undefined> {
+  const stdout = await runLenient('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']);
+  const line = stdout.split(/\r?\n/).find((l) => l.trim().startsWith('"'));
+  if (!line) return undefined;
+  const fields = parseCsvLine(line);
+  return fields.length >= 2 ? fields[0].replace(/\.exe$/i, '') : undefined;
+}
+
+/** Fast filtered lookup of every PID sharing an image name — used for "stop all instances". */
+async function lookupPidsByNameWindows(name: string): Promise<number[]> {
+  const imageName = name.toLowerCase().endsWith('.exe') ? name : `${name}.exe`;
+  const stdout = await runLenient('tasklist.exe', ['/FI', `IMAGENAME eq ${imageName}`, '/FO', 'CSV', '/NH']);
+  const pids: number[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim().startsWith('"')) continue;
+    const fields = parseCsvLine(line);
+    const pid = Number(fields[1]);
+    if (Number.isFinite(pid)) pids.push(pid);
+  }
+  return pids;
+}
+
+async function lookupProcessNamePosix(pid: number): Promise<string | undefined> {
+  const stdout = await runLenient('ps', ['-p', String(pid), '-o', 'comm=']);
+  const name = stdout.trim();
+  return name ? path.basename(name) : undefined;
+}
+
+async function lookupPidsByNamePosix(name: string): Promise<number[]> {
+  const stdout = await runLenient('pgrep', ['-x', name]);
+  return stdout.split(/\r?\n/).map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+}
+
+function lookupProcessName(pid: number): Promise<string | undefined> {
+  return PLATFORM === 'win32' ? lookupProcessNameWindows(pid) : lookupProcessNamePosix(pid);
+}
+
+function lookupPidsByName(name: string): Promise<number[]> {
+  return PLATFORM === 'win32' ? lookupPidsByNameWindows(name) : lookupPidsByNamePosix(name);
 }
 
 async function listProcessesPosix(): Promise<RawProc[]> {
@@ -328,11 +382,17 @@ function buildPortEntry(proto: 'TCP' | 'UDP', localAddress: string, localPort: n
 }
 
 export async function getPorts(): Promise<PortEntry[]> {
-  const nameMap = await getPidNameMap();
   let entries: PortEntry[];
-  if (PLATFORM === 'win32') entries = await getPortsWindows(nameMap);
-  else if (PLATFORM === 'darwin') entries = await getPortsDarwin(nameMap);
-  else entries = await getPortsLinux(nameMap);
+  if (PLATFORM === 'win32') {
+    // netstat carries no process names — resolve them via one tasklist pass.
+    entries = await getPortsWindows(await getPidNameMap());
+  } else if (PLATFORM === 'darwin') {
+    // lsof already reports the owning command per line; no extra listing needed.
+    entries = await getPortsDarwin(new Map());
+  } else {
+    // ss already reports the owning command per line; no extra listing needed.
+    entries = await getPortsLinux(new Map());
+  }
 
   // Dedupe rows that differ only by IPv4/IPv6 binding or multiple fds.
   const seen = new Set<string>();
@@ -361,8 +421,7 @@ export async function killPid(pidInput: string | number): Promise<{ pid: number;
   const pid = Number(pidInput);
   if (!Number.isFinite(pid)) throw new AppError('Invalid PID', 400);
 
-  const nameMap = await getPidNameMap();
-  const name = nameMap.get(pid);
+  const name = await lookupProcessName(pid);
   if (name === undefined) throw new AppError('Process not found', 404);
   if (isProtected(pid, name)) {
     throw new AppError(`Refusing to stop protected/system process "${name}" (PID ${pid})`, 403);
@@ -373,11 +432,7 @@ export async function killPid(pidInput: string | number): Promise<{ pid: number;
 }
 
 export async function killByName(name: string): Promise<KillResult[]> {
-  const nameMap = await getPidNameMap();
-  const target = name.trim().toLowerCase();
-  const pids = Array.from(nameMap.entries())
-    .filter(([, n]) => n.toLowerCase() === target)
-    .map(([pid]) => pid);
+  const pids = await lookupPidsByName(name.trim());
 
   if (pids.length === 0) throw new AppError('No matching processes found', 404);
   if (isProtected(pids[0], name)) {
@@ -396,20 +451,42 @@ export async function killByName(name: string): Promise<KillResult[]> {
   return results;
 }
 
+/** Port -> PID only, no name resolution — used by freePort so it doesn't pay for a full listing. */
+async function getRawPortPids(port: number): Promise<number[]> {
+  if (PLATFORM === 'win32') {
+    const out = await run('netstat.exe', ['-ano']);
+    const re = /^\s*(TCP|UDP)\s+(\S+)\s+(\S+)\s+(?:(\S+)\s+)?(\d+)\s*$/i;
+    const pids = new Set<number>();
+    for (const line of out.split(/\r?\n/)) {
+      const m = line.match(re);
+      if (!m) continue;
+      const proto = m[1].toUpperCase();
+      const state = m[4] || '';
+      if (proto === 'TCP' && state.toUpperCase() !== 'LISTENING') continue;
+      const localPort = portFromAddress(m[2]);
+      if (localPort === port) pids.add(Number(m[5]));
+    }
+    return Array.from(pids);
+  }
+  // POSIX tools (lsof/ss) are fast enough that a full pass isn't a bottleneck.
+  const ports = await getPorts();
+  return Array.from(new Set(ports.filter((e) => e.localPort === port).map((e) => e.pid)));
+}
+
 export async function freePort(portInput: string | number): Promise<KillResult[]> {
   const port = Number(portInput);
-  const ports = await getPorts();
-  const targets = ports.filter((e) => e.localPort === port);
-  if (targets.length === 0) throw new AppError('Nothing is listening on that port', 404);
+  const pids = (await getRawPortPids(port)).filter((pid) => pid > 0);
+  if (pids.length === 0) throw new AppError('Nothing is listening on that port', 404);
 
-  const blocked = targets.find((t) => t.protected);
-  if (blocked) {
-    throw new AppError(`Refusing to free port ${port}: held by protected/system process "${blocked.processName}" (PID ${blocked.pid})`, 403);
+  for (const pid of pids) {
+    const name = await lookupProcessName(pid);
+    if (name !== undefined && isProtected(pid, name)) {
+      throw new AppError(`Refusing to free port ${port}: held by protected/system process "${name}" (PID ${pid})`, 403);
+    }
   }
 
-  const uniquePids = Array.from(new Set(targets.map((t) => t.pid))).filter((pid) => pid > 0);
   const results: KillResult[] = [];
-  for (const pid of uniquePids) {
+  for (const pid of pids) {
     try {
       await killProcess(pid);
       results.push({ pid, ok: true });

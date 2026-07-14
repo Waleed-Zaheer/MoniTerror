@@ -65,6 +65,48 @@ function AppInner() {
     }
   }, [auto, refresh]);
 
+  // Optimistic local edits — applied immediately on a successful stop/free so the
+  // row disappears right away, instead of waiting on a second slow round-trip.
+  // A background refresh() still runs to reconcile with the real system state.
+  const removeGroupLocally = useCallback((name: string) => {
+    setOverview((prev) => {
+      if (!prev) return prev;
+      const removed = prev.processes.find((g) => g.name === name);
+      const processes = prev.processes.filter((g) => g.name !== name);
+      const wasCloseable = removed && prev.closeable.names.includes(name);
+      const closeable = wasCloseable
+        ? {
+            count: prev.closeable.count - 1,
+            totalMemBytes: prev.closeable.totalMemBytes - (removed?.totalMemBytes ?? 0),
+            names: prev.closeable.names.filter((n) => n !== name),
+          }
+        : prev.closeable;
+      return { ...prev, processes, closeable };
+    });
+  }, []);
+
+  const removeInstanceLocally = useCallback((pid: number) => {
+    setOverview((prev) => {
+      if (!prev) return prev;
+      const processes = prev.processes
+        .map((g) => {
+          const inst = g.instances.find((i) => i.pid === pid);
+          if (!inst) return g;
+          return {
+            ...g,
+            instances: g.instances.filter((i) => i.pid !== pid),
+            totalMemBytes: g.totalMemBytes - inst.memBytes,
+          };
+        })
+        .filter((g) => g.instances.length > 0);
+      return { ...prev, processes };
+    });
+  }, []);
+
+  const removePortLocally = useCallback((port: number) => {
+    setPorts((prev) => prev.filter((p) => p.localPort !== port));
+  }, []);
+
   const stopGroup = useCallback(async (g: ProcessGroup) => {
     const multi = g.instances.length > 1;
     const ok = await confirm({
@@ -80,13 +122,14 @@ function AppInner() {
     try {
       await api.stopByName(g.name);
       toast(`Stopped "${g.name}".`);
-      await refresh(false);
+      removeGroupLocally(g.name);
+      refresh(false);
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
       setBusyName(null);
     }
-  }, [confirm, refresh, toast]);
+  }, [confirm, refresh, removeGroupLocally, toast]);
 
   const stopPid = useCallback(async (pid: number, name: string) => {
     const ok = await confirm({
@@ -99,11 +142,12 @@ function AppInner() {
     try {
       await api.stopByPid(pid);
       toast(`Stopped PID ${pid}.`);
-      await refresh(false);
+      removeInstanceLocally(pid);
+      refresh(false);
     } catch (e) {
       toast((e as Error).message, 'error');
     }
-  }, [confirm, refresh, toast]);
+  }, [confirm, refresh, removeInstanceLocally, toast]);
 
   const freePort = useCallback(async (port: number, name: string) => {
     const ok = await confirm({
@@ -117,13 +161,14 @@ function AppInner() {
     try {
       await api.freePort(port);
       toast(`Freed port ${port}.`);
-      await refresh(false);
+      removePortLocally(port);
+      refresh(false);
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
       setBusyPort(null);
     }
-  }, [confirm, refresh, toast]);
+  }, [confirm, refresh, removePortLocally, toast]);
 
   const closeAll = useCallback(async () => {
     if (!overview) return;
@@ -141,13 +186,14 @@ function AppInner() {
     for (const name of names) {
       try {
         await api.stopByName(name);
+        removeGroupLocally(name);
         ok2++;
       } catch { /* keep going */ }
     }
     toast(`Closed ${ok2} of ${names.length} app(s).`);
     setBulkBusy(false);
-    await refresh(false);
-  }, [confirm, overview, refresh, toast]);
+    refresh(false);
+  }, [confirm, overview, refresh, removeGroupLocally, toast]);
 
   const filteredGroups = useMemo(() => {
     if (!overview) return [];
