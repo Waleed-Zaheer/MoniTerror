@@ -1,5 +1,5 @@
 node_modules/
 dist/
-public/app.js
-public/app.js.map
+client/dist/
 *.log
+.DS_Store

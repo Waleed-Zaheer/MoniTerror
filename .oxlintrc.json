@@ -1,7 +1,8 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react"],
   "categories": {
     "correctness": "error"
   },
-  "ignorePatterns": ["dist", "node_modules", "public/app.js"]
+  "ignorePatterns": ["dist", "node_modules", "client/dist"]
 }

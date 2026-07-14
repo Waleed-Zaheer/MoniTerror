@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Dark by default; matches the slate-950 / emerald / blue snippet aesthetic. */
+@theme {
+  --color-brand-50: #eef4ff;
+  --color-brand-400: #6ea8ff;
+  --color-brand-500: #4b86ff;
+  --color-brand-600: #2f6bff;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* App background — radial glow over slate. */
+.app-bg {
+  background:
+    radial-gradient(1100px 550px at 82% -12%, rgba(37, 99, 235, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 0% 0%, rgba(16, 185, 129, 0.10), transparent 55%),
+    #060810;
+  min-height: 100vh;
+}
+
+/* Thin custom scrollbars inside scroll areas. */
+.scroll-area::-webkit-scrollbar { height: 8px; width: 8px; }
+.scroll-area::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: 8px; }
+.scroll-area::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-up { animation: fade-up .25s ease both; }

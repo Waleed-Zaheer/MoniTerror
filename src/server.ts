@@ -5,7 +5,8 @@ import { getOverview, getPorts, killPid, killByName, freePort, AppError } from '
 const app = express();
 const PORT = Number(process.env.MONITERROR_PORT) || 4590;
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+const CLIENT_DIR = path.join(__dirname, '..', 'client', 'dist');
+app.use(express.static(CLIENT_DIR));
 app.use(express.json());
 
 function errorStatus(e: unknown): number {
@@ -54,6 +55,11 @@ app.post('/api/ports/:port/free', async (req, res) => {
   } catch (e) {
     res.status(errorStatus(e)).json({ error: errorMessage(e) });
   }
+});
+
+// SPA fallback: serve index.html for any non-API GET route.
+app.get(/^(?!\/api\/).*/, (_req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'index.html'));
 });
 
 app.listen(PORT, () => {
