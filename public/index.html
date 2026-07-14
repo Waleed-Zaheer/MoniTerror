@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>moniterror</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◈</span>
+      <span class="brand-name">moniterror</span>
+    </div>
+    <div class="mem-summary" id="memSummary">
+      <div class="mem-bar-track">
+        <div class="mem-bar-fill" id="memBarFill"></div>
+      </div>
+      <div class="mem-text" id="memText">Loading…</div>
+    </div>
+    <div class="controls">
+      <label class="auto-refresh">
+        <input type="checkbox" id="autoRefreshToggle" checked />
+        Auto-refresh
+      </label>
+      <button id="refreshBtn" class="btn btn-primary">Refresh</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="ram">RAM Usage</button>
+    <button class="tab" data-tab="ports">Ports</button>
+  </nav>
+
+  <main>
+    <section id="ram-tab" class="tab-panel active">
+      <div class="panel-head">
+        <h2>Processes by RAM usage</h2>
+        <span class="hint" id="ramUpdatedAt"></span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Process</th>
+            <th>Instances</th>
+            <th>RAM</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="ramTableBody"></tbody>
+      </table>
+    </section>
+
+    <section id="ports-tab" class="tab-panel">
+      <div class="panel-head">
+        <h2>Ports in use</h2>
+        <span class="hint" id="portsUpdatedAt"></span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Port</th>
+            <th>Proto</th>
+            <th>State</th>
+            <th>Local address</th>
+            <th>Process</th>
+            <th>PID</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="portsTableBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
