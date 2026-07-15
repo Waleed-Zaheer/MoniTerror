@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import type { Category, Overview, PortEntry, ProcessGroup } from './types';
-import { Button, Card, ConfirmProvider, Spinner, Toggle, ToastProvider, useConfirm, useToast } from './components/ui';
+import { Button, Card, CATEGORY_LABELS, ConfirmProvider, Spinner, Toggle, ToastProvider, useConfirm, useToast } from './components/ui';
 import { IconCpu, IconPlug, IconSearch } from './components/icons';
-import { StatCards } from './components/StatCards';
+import { MemoryHero } from './components/MemoryHero';
 import { SuggestBanner } from './components/SuggestBanner';
 import { ProcessTable } from './components/ProcessTable';
 import { PortsTable } from './components/PortsTable';
@@ -11,11 +11,11 @@ import { PortsTable } from './components/PortsTable';
 const AUTO_REFRESH_MS = 5000;
 const FILTERS: { key: Category | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'background-app', label: 'Background apps' },
-  { key: 'dev', label: 'Dev' },
-  { key: 'browser', label: 'Browsers' },
-  { key: 'editor', label: 'Editors' },
-  { key: 'system', label: 'System' },
+  { key: 'background-app', label: CATEGORY_LABELS['background-app'] },
+  { key: 'dev', label: CATEGORY_LABELS.dev },
+  { key: 'browser', label: CATEGORY_LABELS.browser },
+  { key: 'editor', label: CATEGORY_LABELS.editor },
+  { key: 'system', label: CATEGORY_LABELS.system },
 ];
 
 function AppInner() {
@@ -221,18 +221,18 @@ function AppInner() {
   }, [ports, portSearch]);
 
   return (
-    <div className="app-bg min-h-screen text-slate-200">
+    <div className="app-bg min-h-screen text-slate-300">
       {/* Sticky header */}
-      <div className="sticky top-0 z-40 border-b border-white/10 bg-[#060810]/80 backdrop-blur-md">
-        <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-7">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl text-brand-400 drop-shadow-[0_0_10px_rgba(110,168,255,0.5)]">◈</span>
+      <div className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur-md">
+        <header className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-5 py-3.5 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="text-lg text-brand-400">◈</span>
             <div className="leading-tight">
-              <div className="text-lg font-extrabold tracking-tight text-slate-50">MoniTerror</div>
-              <div className="text-xs text-slate-400">{overview ? overview.platformLabel : '—'} · localhost:4590</div>
+              <div className="text-[15px] font-semibold tracking-tight text-slate-100">MoniTerror</div>
+              <div className="text-xs text-slate-500">{overview ? overview.platformLabel : '—'} · :4590</div>
             </div>
           </div>
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-4">
             <Toggle checked={auto} onChange={setAuto} label="Auto-refresh" />
             <Button variant="primary" onClick={() => refresh(true)} disabled={loading}>
               {loading ? <Spinner /> : null}
@@ -242,41 +242,41 @@ function AppInner() {
         </header>
       </div>
 
-      <div className="mx-auto max-w-6xl px-5 pb-20 pt-5 sm:px-7">
-        <StatCards overview={overview} />
+      <div className="mx-auto max-w-5xl px-5 pb-16 pt-5 sm:px-6">
+        <MemoryHero overview={overview} />
 
-        {/* Tabs */}
-        <div className="mt-5 flex items-center gap-1 border-b border-white/10">
-          <TabButton active={tab === 'ram'} onClick={() => setTab('ram')} icon={<IconCpu className="h-4 w-4" />} label="RAM & Processes" />
-          <TabButton active={tab === 'ports'} onClick={() => setTab('ports')} icon={<IconPlug className="h-4 w-4" />} label="Ports" count={ports.length} />
-          <span className="ml-auto pb-2 text-xs text-slate-500">{updatedAt && `Updated ${updatedAt}`}</span>
+        {/* Segmented tabs */}
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <div className="inline-flex gap-0.5 rounded-lg border border-line bg-surface p-0.5">
+            <SegmentButton active={tab === 'ram'} onClick={() => setTab('ram')} icon={<IconCpu className="h-3.5 w-3.5" />} label="RAM & Processes" />
+            <SegmentButton active={tab === 'ports'} onClick={() => setTab('ports')} icon={<IconPlug className="h-3.5 w-3.5" />} label="Ports" count={ports.length} />
+          </div>
+          <span className="hidden text-xs text-slate-600 sm:block">{updatedAt && `Updated ${updatedAt}`}</span>
         </div>
 
         {/* RAM tab */}
         {tab === 'ram' && (
-          <div className="animate-fade-up pt-5">
+          <div className="animate-fade-up pt-4">
             {overview && <SuggestBanner overview={overview} onCloseAll={closeAll} busy={bulkBusy} />}
 
-            <div className="mb-3 flex flex-wrap items-center gap-2.5">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <div className="relative min-w-[200px] flex-1">
-                <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600" />
                 <input
                   type="search"
                   value={ramSearch}
                   onChange={(e) => setRamSearch(e.target.value)}
                   placeholder="Filter processes by name…"
-                  className="w-full rounded-xl bg-white/5 py-2 pl-9 pr-3.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-brand-500"
+                  className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] text-slate-200 outline-none placeholder:text-slate-600 focus:border-brand-500"
                 />
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1">
                 {FILTERS.map((f) => (
                   <button
                     key={f.key}
                     onClick={() => setRamFilter(f.key)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition
-                      ${ramFilter === f.key
-                        ? 'bg-brand-500/15 text-brand-300 ring-brand-500/40'
-                        : 'bg-white/5 text-slate-400 ring-white/10 hover:text-slate-200'}`}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors
+                      ${ramFilter === f.key ? 'bg-white/10 text-slate-100' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}
                   >
                     {f.label}
                   </button>
@@ -298,20 +298,20 @@ function AppInner() {
 
         {/* Ports tab */}
         {tab === 'ports' && (
-          <div className="animate-fade-up pt-5">
+          <div className="animate-fade-up pt-4">
             <div className="relative mb-3">
-              <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600" />
               <input
                 type="search"
                 value={portSearch}
                 onChange={(e) => setPortSearch(e.target.value)}
                 placeholder="Filter by port, process, or address…"
-                className="w-full rounded-xl bg-white/5 py-2 pl-9 pr-3.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-500 focus:ring-brand-500"
+                className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] text-slate-200 outline-none placeholder:text-slate-600 focus:border-brand-500"
               />
             </div>
-            <p className="mb-3 text-sm text-slate-400">
-              Showing ports actively listening or bound — the ones that make a dev server say “port already in use.”
-              Common dev ports are tagged <span className="font-semibold text-emerald-300">dev</span>.
+            <p className="mb-3 text-xs text-slate-500">
+              Ports actively listening or bound — the ones that make a dev server say "port already in use."
+              <span className="ml-1.5 inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> common dev port</span>
             </p>
             <Card className="overflow-hidden">
               <PortsTable ports={filteredPorts} busyPort={busyPort} onFree={freePort} />
@@ -323,7 +323,7 @@ function AppInner() {
   );
 }
 
-function TabButton({
+function SegmentButton({
   active,
   onClick,
   icon,
@@ -339,13 +339,15 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition
-        ${active ? 'border-brand-400 text-slate-50' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors
+        ${active ? 'bg-white/10 text-slate-50' : 'text-slate-500 hover:text-slate-300'}`}
     >
-      <span className={active ? 'text-brand-400' : 'text-slate-500'}>{icon}</span>
+      {icon}
       {label}
       {count !== undefined && count > 0 && (
-        <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-bold text-brand-300">{count}</span>
+        <span className={`rounded px-1.5 text-[11px] font-semibold ${active ? 'bg-white/10 text-slate-300' : 'bg-white/5 text-slate-500'}`}>
+          {count}
+        </span>
       )}
     </button>
   );

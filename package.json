@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "description": "Local RAM & port monitor — see what's eating memory, get told what's safe to close, stop it, and see which process owns each port. Cross-platform (Windows/macOS/Linux).",
   "private": true,
-  "main": "dist/server.js",
+  "main": "dist-electron/main.js",
   "type": "commonjs",
   "scripts": {
     "build:server": "tsc -p tsconfig.json",
     "build:client": "vite build",
-    "build": "pnpm build:server && pnpm build:client",
-    "start": "pnpm build && node dist/server.js",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "pnpm build:server && pnpm build:client && pnpm build:electron",
+    "start": "pnpm build:server && pnpm build:client && node dist/server.js",
     "server": "node dist/server.js",
+    "electron": "pnpm build && electron .",
+    "dist:win": "pnpm build && electron-builder --win --publish=never",
     "dev:server": "tsc -p tsconfig.json --watch",
     "dev:client": "vite",
     "lint": "oxlint ."
@@ -27,9 +30,28 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "oxlint": "^0.15.9",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
+  },
+  "build": {
+    "appId": "com.moniterror.app",
+    "productName": "MoniTerror",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "client/dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["portable"],
+      "signAndEditExecutable": false
+    }
   }
 }
