@@ -112,6 +112,61 @@ Lint with [oxlint](https://oxc.rs): `pnpm lint`.
 
 ---
 
+## Architecture
+
+One Express server does the real work; two different shells present it. That's the whole
+design, and it's why the desktop app and the browser version are never out of sync.
+
+```text
+              ┌──────────────────────────────────────────┐
+              │  React 18 + Tailwind v4  (client/)        │
+              │  polls /api/* every 5s                    │
+              └───────────────┬──────────────────────────┘
+                              │ HTTP :4590
+              ┌───────────────▼──────────────────────────┐
+              │  Express + TypeScript  (src/)             │
+              │   ├─ lib/system.ts   per-OS probing       │
+              │   └─ lib/catalog.ts  "safe to close" KB   │
+              └───────────────┬──────────────────────────┘
+                              │ shells out to native OS tools
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+   Windows              macOS                  Linux
+   tasklist/netstat     ps/lsof                ps/ss
+
+  Served by either:
+    • Electron (electron/main.ts) — embeds the same Express server
+    • A browser at localhost — same server, run standalone
+```
+
+### No native addons, no elevated privileges
+
+Process and port data comes from shelling out to tools that ship with each OS
+(`netstat` on Windows, `lsof` on macOS, `ss` on Linux) rather than from a native Node addon.
+
+That's a deliberate trade: parsing command output is less elegant than a C++ binding, but it
+means no node-gyp, no build toolchain, no per-Node-version rebuilds, and no admin rights —
+which is exactly why the Windows build can ship as a single portable `.exe` with nothing to
+install.
+
+### Safety is enforced server-side
+
+Critical OS processes (`svchost`/`lsass` on Windows, `launchd`/`WindowServer` on macOS,
+`systemd`/`Xorg` on Linux) are marked **locked** and the stop/free routes reject them with
+`403`.
+
+The important detail is that this lives in the API, not the UI. Hiding a button would be
+cosmetic — anyone could still `curl` the endpoint. Since the whole product is "a thing that
+kills processes on your machine", the guard belongs at the only layer that can actually
+enforce it.
+
+### Optimistic UI, then reconciliation
+
+Stopping a process removes its row immediately, then the next 5-second poll reconciles
+against real system state. If the kill silently failed, the row comes back — which is the
+honest outcome, and better than a spinner that blocks the UI on an operation that usually
+succeeds instantly.
+
 ## How it works
 
 | Part | Stack |
