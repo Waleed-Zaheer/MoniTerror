@@ -1,4 +1,4 @@
-import type { Overview, PortEntry } from './types';
+import type { KillResult, Overview, PortEntry } from './types';
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -17,12 +17,33 @@ async function post(url: string): Promise<void> {
   }
 }
 
+/**
+ * The name/port endpoints can target several PIDs at once and report one
+ * `{pid, ok, error}` per target rather than failing the whole HTTP request —
+ * a single stuck/protected process shouldn't hide that the others succeeded.
+ * Still throws on a total failure (HTTP error, or every target failed) so
+ * existing catch-based callers keep working; callers that want to show a
+ * partial-failure message should inspect the returned array themselves.
+ */
+async function postResults(url: string): Promise<KillResult[]> {
+  const res = await fetch(url, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `Request failed (${res.status})`);
+  }
+  const results = data as KillResult[];
+  if (results.length > 0 && results.every((r) => !r.ok)) {
+    throw new Error(results[0]?.error || 'Failed to stop the process(es).');
+  }
+  return results;
+}
+
 export const api = {
   overview: () => getJson<Overview>('/api/overview'),
   ports: () => getJson<PortEntry[]>('/api/ports'),
-  stopByName: (name: string) => post(`/api/processes/name/${encodeURIComponent(name)}/stop`),
+  stopByName: (name: string) => postResults(`/api/processes/name/${encodeURIComponent(name)}/stop`),
   stopByPid: (pid: number) => post(`/api/processes/pid/${pid}/stop`),
-  freePort: (port: number) => post(`/api/ports/${port}/free`),
+  freePort: (port: number) => postResults(`/api/ports/${port}/free`),
 };
 
 export function fmtBytes(bytes: number): string {

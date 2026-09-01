@@ -33,6 +33,12 @@ export interface Overview {
   closeable: CloseableSummary;
 }
 
+export interface KillResult {
+  pid: number;
+  ok: boolean;
+  error?: string;
+}
+
 export interface PortEntry {
   proto: 'TCP' | 'UDP';
   localAddress: string;

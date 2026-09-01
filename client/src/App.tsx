@@ -85,23 +85,28 @@ function AppInner() {
     });
   }, []);
 
-  const removeInstanceLocally = useCallback((pid: number) => {
+  const removeInstancesLocally = useCallback((pids: number[]) => {
+    if (pids.length === 0) return;
+    const pidSet = new Set(pids);
     setOverview((prev) => {
       if (!prev) return prev;
       const processes = prev.processes
         .map((g) => {
-          const inst = g.instances.find((i) => i.pid === pid);
-          if (!inst) return g;
+          const removedMem = g.instances
+            .filter((i) => pidSet.has(i.pid))
+            .reduce((sum, i) => sum + i.memBytes, 0);
+          if (removedMem === 0) return g;
           return {
             ...g,
-            instances: g.instances.filter((i) => i.pid !== pid),
-            totalMemBytes: g.totalMemBytes - inst.memBytes,
+            instances: g.instances.filter((i) => !pidSet.has(i.pid)),
+            totalMemBytes: g.totalMemBytes - removedMem,
           };
         })
         .filter((g) => g.instances.length > 0);
       return { ...prev, processes };
     });
   }, []);
+  const removeInstanceLocally = useCallback((pid: number) => removeInstancesLocally([pid]), [removeInstancesLocally]);
 
   const removePortLocally = useCallback((port: number) => {
     setPorts((prev) => prev.filter((p) => p.localPort !== port));
@@ -120,16 +125,25 @@ function AppInner() {
     if (!ok) return;
     setBusyName(g.name);
     try {
-      await api.stopByName(g.name);
-      toast(`Stopped "${g.name}".`);
-      removeGroupLocally(g.name);
+      const results = await api.stopByName(g.name);
+      const failed = results.filter((r) => !r.ok);
+      const succeededPids = results.filter((r) => r.ok).map((r) => r.pid);
+      if (failed.length === 0) {
+        toast(`Stopped "${g.name}".`);
+        removeGroupLocally(g.name);
+      } else {
+        // A total failure already threw (see api.postResults) and lands in
+        // the catch below — reaching here means some, not all, succeeded.
+        toast(`Stopped ${succeededPids.length} of ${results.length} instance(s) of "${g.name}" — ${failed[0].error}`, 'error');
+        removeInstancesLocally(succeededPids);
+      }
       refresh(false);
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
       setBusyName(null);
     }
-  }, [confirm, refresh, removeGroupLocally, toast]);
+  }, [confirm, refresh, removeGroupLocally, removeInstancesLocally, toast]);
 
   const stopPid = useCallback(async (pid: number, name: string) => {
     const ok = await confirm({
@@ -159,9 +173,18 @@ function AppInner() {
     if (!ok) return;
     setBusyPort(port);
     try {
-      await api.freePort(port);
-      toast(`Freed port ${port}.`);
-      removePortLocally(port);
+      const results = await api.freePort(port);
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        toast(`Freed port ${port}.`);
+        removePortLocally(port);
+      } else {
+        // Total failure already threw into the catch below — some
+        // processes on this port were freed, but not all of them, so the
+        // port is still in use. Don't remove the row; let refresh() show
+        // the real state.
+        toast(`Port ${port} is still in use — ${failed[0].error}`, 'error');
+      }
       refresh(false);
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -185,15 +208,19 @@ function AppInner() {
     let ok2 = 0;
     for (const name of names) {
       try {
-        await api.stopByName(name);
-        removeGroupLocally(name);
-        ok2++;
-      } catch { /* keep going */ }
+        const results = await api.stopByName(name);
+        if (results.every((r) => r.ok)) {
+          removeGroupLocally(name);
+          ok2++;
+        } else {
+          removeInstancesLocally(results.filter((r) => r.ok).map((r) => r.pid));
+        }
+      } catch { /* keep going — partial failures are still reflected in the count below */ }
     }
     toast(`Closed ${ok2} of ${names.length} app(s).`);
     setBulkBusy(false);
     refresh(false);
-  }, [confirm, overview, refresh, removeGroupLocally, toast]);
+  }, [confirm, overview, refresh, removeGroupLocally, removeInstancesLocally, toast]);
 
   const filteredGroups = useMemo(() => {
     if (!overview) return [];
