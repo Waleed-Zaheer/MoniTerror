@@ -14,10 +14,36 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'Unknown error';
 }
 
-export function createApp(): Express {
+/**
+ * Rejects cross-origin requests to the mutating endpoints. Without this, any
+ * web page open in the user's browser — not just this app — can POST to
+ * http://localhost:<port>/api/processes/... and kill processes on the
+ * user's machine; that works purely because the request originates from
+ * the user's own machine, regardless of whether this server is reachable
+ * from the network (see the host binding below).
+ *
+ * Same-origin requests (this app's own served page, or the Electron
+ * renderer) either omit Origin or send one matching our own — both allowed.
+ * Any other Origin is rejected.
+ */
+function requireSameOrigin(port: number) {
+  const allowed = new Set([`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = req.headers.origin;
+    if (origin && !allowed.has(origin)) {
+      res.status(403).json({ error: 'Cross-origin request rejected' });
+      return;
+    }
+    next();
+  };
+}
+
+export function createApp(port: number = DEFAULT_PORT): Express {
   const app = express();
   app.use(express.static(CLIENT_DIR));
   app.use(express.json());
+  app.use('/api/processes', requireSameOrigin(port));
+  app.use('/api/ports', requireSameOrigin(port));
 
   app.get('/api/overview', async (_req, res) => {
     try {
@@ -67,11 +93,17 @@ export function createApp(): Express {
   return app;
 }
 
+const LOCALHOST = '127.0.0.1';
+
 export function startServer(port: number = DEFAULT_PORT): Promise<Server> {
   return new Promise((resolve, reject) => {
-    const app = createApp();
-    const server = app.listen(port, () => {
-      console.log(`moniterror running at http://localhost:${port}`);
+    const app = createApp(port);
+    // Explicit host: an unspecified host defaults to 0.0.0.0 (all network
+    // interfaces), which would let anyone on the same Wi-Fi/LAN reach the
+    // process-kill endpoints below. This app has no reason to be reachable
+    // from anywhere but this machine.
+    const server = app.listen(port, LOCALHOST, () => {
+      console.log(`moniterror running at http://${LOCALHOST}:${port}`);
       resolve(server);
     });
     server.on('error', reject);
