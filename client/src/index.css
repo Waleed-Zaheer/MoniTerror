@@ -1,17 +1,123 @@
 @import "tailwindcss";
 
-/* One accent. Everything else is neutral gray or a semantic color used sparingly. */
-@theme {
-  --color-brand-50: #eef4ff;
-  --color-brand-400: #6ea8ff;
-  --color-brand-500: #4b86ff;
-  --color-brand-600: #2f6bff;
+/*
+ * Custom variants every ported my-snippets component relies on for its
+ * data-attribute-driven animations (data-open:, data-checked:, etc).
+ */
+@custom-variant data-open {
+  &:where([data-state="open"]),
+  &:where([data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-closed {
+  &:where([data-state="closed"]),
+  &:where([data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-checked {
+  &:where([data-state="checked"]),
+  &:where([data-checked]:not([data-checked="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-unchecked {
+  &:where([data-state="unchecked"]),
+  &:where([data-unchecked]:not([data-unchecked="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-selected {
+  &:where([data-selected="true"]) {
+    @slot;
+  }
+}
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-active {
+  &:where([data-state="active"]),
+  &:where([data-active]:not([data-active="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
 
-  --color-canvas: #0a0b0e;
-  --color-surface: #121317;
-  --color-surface-2: #17181d;
-  --color-line: rgba(255, 255, 255, 0.07);
-  --color-line-strong: rgba(255, 255, 255, 0.12);
+/* Dark-only — this is a utility tool, not a themeable product. */
+:root {
+  --background: oklch(0.16 0.008 260);
+  --foreground: oklch(0.93 0.006 260);
+  --card: oklch(0.205 0.008 260);
+  --card-foreground: oklch(0.93 0.006 260);
+  --popover: oklch(0.24 0.009 260);
+  --popover-foreground: oklch(0.93 0.006 260);
+  --primary: oklch(0.665 0.176 259.6);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.27 0.009 260);
+  --secondary-foreground: oklch(0.93 0.006 260);
+  --muted: oklch(0.24 0.009 260);
+  --muted-foreground: oklch(0.63 0.014 260);
+  --accent: oklch(0.29 0.011 260);
+  --accent-foreground: oklch(0.93 0.006 260);
+  --destructive: oklch(0.645 0.209 16.4);
+  --destructive-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.795 0.15 85);
+  --warning-foreground: oklch(0.28 0.06 70);
+  --success: oklch(0.72 0.16 155);
+  --success-foreground: oklch(0.99 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.665 0.176 259.6 / 45%);
+  --radius: 0.7rem;
+  --scrollbar-thumb: oklch(1 0 0 / 12%);
+  --scrollbar-thumb-hover: oklch(1 0 0 / 22%);
+}
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 html {
@@ -20,24 +126,55 @@ html {
 
 body {
   margin: 0;
-  font-family: "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
 }
 
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+}
+
 /* Flat, tool-like background — a single quiet vignette, not a gradient bloom. */
 .app-bg {
-  background: radial-gradient(900px 420px at 50% -18%, rgba(75, 134, 255, 0.07), transparent 65%), var(--color-canvas);
+  background: radial-gradient(900px 420px at 50% -18%, oklch(0.665 0.176 259.6 / 8%), transparent 65%), var(--color-background);
   min-height: 100vh;
 }
 
-/* Thin custom scrollbars inside scroll areas. */
-.scroll-area::-webkit-scrollbar { height: 8px; width: 8px; }
-.scroll-area::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 8px; }
-.scroll-area::-webkit-scrollbar-track { background: transparent; }
-
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.animate-fade-up { animation: fade-up .18s ease both; }
+.animate-fade-up {
+  animation: fade-up 0.18s ease both;
+}
